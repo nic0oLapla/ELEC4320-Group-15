@@ -1,0 +1,12 @@
+## log files
+*.log
+*.jou
+
+## dirs
+.Xil/
+*.cache/
+*.hbs/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
