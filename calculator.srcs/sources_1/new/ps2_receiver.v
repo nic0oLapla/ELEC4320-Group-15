@@ -25,8 +25,7 @@ module ps2_receiver(
     input kb_clk,
     input kb_key,
     output reg [7:0] keycode = 0,
-    output reg valid_out,
-    output [1:0] led
+    output reg valid
     );
     
     wire db_clk, db_key;    // debounced keyboard clock and key
@@ -76,13 +75,10 @@ module ps2_receiver(
         if (char && !p_char) begin
             if (curr_key != 8'hF0 && prev_key != 8'hF0) begin    // ignore break sequences
                 keycode <= curr_key;
-                valid_out <= 1'b1;
+                valid <= 1'b1;
             end           
             prev_key <= curr_key;
         end else
-            valid_out <= 1'b0;
+            valid <= 1'b0;
     end
-
-    assign led = 0;
-
 endmodule

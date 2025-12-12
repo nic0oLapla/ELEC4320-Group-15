@@ -23,7 +23,7 @@
 module num_2_ascii(
     input clk,
     input [15:0] num,
-    input valid,
+    input start,
     input uart_ready,
     output reg [7:0] char,
     output reg running,
@@ -45,7 +45,7 @@ module num_2_ascii(
         // WAITING FOR NEW NUMBER FROM CALCULATOR
         IDLE: begin
             uart_start <= 0;
-            if (valid) begin
+            if (start) begin
                 running <= 1;       // block calculator
                 rem <= num;         // load result 
                 digit_idx <= 0;     // start at 10,000s place

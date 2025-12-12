@@ -19,113 +19,151 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
 module keys_2_calc(
     input clk,
-    input [7:0] keycode,
-    input start,            // EoC signal from sp/2
-    input ready,            // ready-to-receive from calc
-    output reg [15:0] A,    // two's C 16-bit int
-    output reg [15:0] B,
-    output reg [3:0] op,    // 4-bit opcode
-    output reg valid        // 1-tick valid pulse for calc
+    input [7:0] keycode,    // input from ps/2 receiver (1 byte ps/2 code)
+    input [31:0] result,    // output from ALU          (2's C fixed-point, 1-21-10)
+    input start,            // sp/2 end-of-char         (1-tick high when keycode ready)
+    input idle,             // ALU state                (high = ALU idle, low = ALU running)
+    output reg [31:0] A,    // first operand            (2's C fixed-point, 1-21-10)
+    output reg [31:0] B,    // second operand           (2's C fixed-point, 1-21-10)
+    output reg [3:0] op,    // opcode                   (4-bit 0-13)
+    output reg [31:0] final,// final result for UART    (2's C fixed-point, 1-21-10)
+    output reg valid,       // valid calc for ALU       (1-tick high when A,B,op ready to calc)
+    output reg print        // ready to print for UART  (1-tick high when final ready to print)
     );
     
     reg [3:0] digit = 0;
     reg [1:0] count = 0;
-    
-    localparam IDLE = 0, NUM1 = 1, OP = 2, NUM2 = 3;
-    reg [1:0] state = IDLE;
+    reg sign = 0; // 0 positive, 1 negative
     
     reg p_start = 0;
+    localparam NUM = 0, U_OP = 1, B_OP = 2;
+    reg [1:0] p_push = NUM; // Last item pushed
+
+    // Stack (would have done this as a seperate module but then I'd need multiple clock cycles for multiple pushes/pops
+    reg [31:0]  stack [0:31];
+    reg [3:0]   rsp = 0;
+    wire empty = rsp == 0;
+
+    localparam KEY = 0,         // Waiting for keyboard input
+               PREP_NUM = 1,    // 3 digits entered, prepare num
+               PUSH_NUM = 2,    // Number ready to push or send
+               RES = 3;         // Waiting for result from ALU
+    reg [1:0] state = KEY;
     
     always@(posedge clk) begin
-    if (ready && start && !p_start) begin
+    valid <= 0;
+    print <= 0;
+    
+    if (idle) begin
         case (state)
-        IDLE: begin
-            valid <= 0;
-            if (start) begin
-                A <= 0;
-                B <= 0;
-                count <= 0;
-                state <= NUM1;
-            end
-        end
-        
-        NUM1: begin
-        if (count <= 2) begin
+        KEY: begin
+            if (start && !p_start) begin   // Wait for signal from ps/2 receiver
             case (keycode)
-            8'h16: A <= (8'd10 * A) + 8'd1; // 1 - 9
-            8'h1E: A <= (8'd10 * A) + 8'd2;
-            8'h26: A <= (8'd10 * A) + 8'd3;
-            8'h25: A <= (8'd10 * A) + 8'd4;
-            8'h2E: A <= (8'd10 * A) + 8'd5;
-            8'h36: A <= (8'd10 * A) + 8'd6;
-            8'h3D: A <= (8'd10 * A) + 8'd7;
-            8'h3E: A <= (8'd10 * A) + 8'd8;
-            8'h46: A <= (8'd10 * A) + 8'd9; 
-            8'h45: A <= (8'd10 * A);        // 0
-            8'h4E: begin                    // negative
-                A <= -A;
-                count <= count - 1;
+            8'h16, 8'h1E, 8'h26, 8'h25, 8'h2E, 8'h36, 8'h3D, 8'h3E, 8'h46, 8'h45: begin // Digits [1-9, 0]
+                digit <= (8'd10 * digit) + keycode;
+                count <= count + 1;
+                if (count == 3) begin
+                    state <= PREP_NUM;
+                end
             end
+            
+            8'h4E: sign <= ~sign;                                                       // Negative
+            
+            8'h15, 8'h1D, 8'h24, 8'h2D, 8'h1C, 8'h1B: begin                             // Binary opcodes: [0-3, 10-11]
+                if (p_push == NUM) begin
+                    stack[rsp] <= keycode;
+                    rsp <= rsp + 1;
+                end else begin
+                    stack[rsp-1] <= keycode;  // Replace last entered operation (cannot have binary operation after anything except number)
+                end
+                p_push <= B_OP;
+            end
+            
+            8'h2C, 8'h35, 8'h3C, 8'h43, 8'h44, 8'h4D, 8'h23, 8'h2B: begin               // Unary opcodes: [4-9, 12-13]
+                stack[rsp] <= keycode;
+                rsp <= rsp + 1;
+                p_push <= U_OP;
+            end
+            
+            8'h5A: begin                                                                // Enter - print result
+                if (!empty) begin
+                    final <= stack[rsp-1];
+                    rsp <= rsp - 1;
+                    print <= 1;
+                end
+            end           
             endcase
             count <= count + 1;
-        end else begin
-            op <= 8'hFF;
-            state <= OP;
         end
+        end
+        
+        PREP_NUM: begin
+            if (digit != 0) begin
+                if (!sign) digit <= digit << 10;
+                else digit <= -(digit << 10);
+            end
+            state <= PUSH_NUM;
+        end
+        
+        PUSH_NUM: begin
+            case (p_push) // If previous entry was a number replace it, else send calc to ALU
+            NUM: begin
+                stack[rsp-1] <= digit;  
+                state <= KEY;
+            end
+            B_OP: begin
+                op <= stack[rsp-1];
+                A <= stack[rsp-2];
+                B <= digit;
+                rsp <= rsp - 2;
+                valid <= 1;
+                state <= RES;
+            end
+            U_OP: begin
+                op <= stack[rsp-1];
+                A <= digit;
+                B <= 0;
+                rsp <= rsp - 1;
+                valid <= 1;
+                state <= RES;
+            end
+            endcase   
+
+            digit <= 0;
+            count <= 0;
+            sign <= 0;
         end
     
-        OP: begin
-            case (keycode)
-            8'h15: op <= 0;
-            8'h1D: op <= 1;
-            8'h24: op <= 2;
-            8'h2D: op <= 3;
-            8'h2C: op <= 4;
-            8'h35: op <= 5;
-            8'h3C: op <= 6;
-            8'h43: op <= 7;
-            8'h44: op <= 8;
-            8'h4D: op <= 9;
-            8'h1C: op <= 10;
-            8'h1B: op <= 11;
-            8'h23: op <= 12;
-            8'h2B: op <= 13;
-            endcase
-            if (op != 8'hFF) begin
-                count <= 0;
-                state <= NUM2;
+        RES: begin                  // Already know ALU is idle because of top-level if (line 69)
+            if (empty) begin
+                stack[rsp] <= result;
+                rsp <= rsp + 1;
+                state <= KEY;
+            end else begin
+                case (stack[rsp-1]) // If stack is not empty after getting result, top will always be a queued opcode 
+                0, 1, 2, 3, 10, 11: begin       // Binary OP
+                    op <= stack[rsp-1];
+                    A <= stack[rsp-2];
+                    B <= result;
+                    rsp <= rsp - 2;
+                end
+                4, 5, 6, 7, 8, 9, 12, 13: begin // Unary OP
+                    op <= stack[rsp-1];
+                    A <= result;
+                    B <= 0;
+                    rsp <= rsp - 1;
+                end
+                endcase
+                valid <= 1; // Tell ALU we have a calculation for it
+                state <= RES;
             end
         end
         
-        NUM2: begin
-        if (count <= 2) begin
-            case (keycode)
-            8'h16: B <= (8'd10 * B) + 8'd1; // 1 - 9
-            8'h1E: B <= (8'd10 * B) + 8'd2;
-            8'h26: B <= (8'd10 * B) + 8'd3;
-            8'h25: B <= (8'd10 * B) + 8'd4;
-            8'h2E: B <= (8'd10 * B) + 8'd5;
-            8'h36: B <= (8'd10 * B) + 8'd6;
-            8'h3D: B <= (8'd10 * B) + 8'd7;
-            8'h3E: B <= (8'd10 * B) + 8'd8;
-            8'h46: B <= (8'd10 * B) + 8'd9; 
-            8'h45: B <= (8'd10 * B);        // 0
-            8'h4E: begin                    // negative
-                B <= -B;
-                count <= count - 1;
-            end
-            endcase
-            count <= count + 1;
-        end else begin
-            valid <= 1;     // pulse valid
-            state <= IDLE;
-        end
-        end
         endcase
-    end else valid <= 0;    // set valid back to zero for 1-tick pulse
+    end
+    p_start <= start;
     end
     
 endmodule

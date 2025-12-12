@@ -28,11 +28,19 @@ module top(
     output        led_0,
     output        led_1
 );
-    wire        ready;
-    wire        start;
-    wire        valid;
+
     wire [7:0]  keycode;
+    wire        valid_ps2;
+    reg  [31:0] result;
+    reg         alu_idle;
+    wire        A;
+    wire        B;
+    wire        op;
+    wire        final;
+    wire        valid_calc;
+    wire        print;
     wire [7:0]  ascii;
+    wire        uart_ready;
 
     reg         CLK50MHZ=0;
     always @(posedge(clk))begin
@@ -43,20 +51,41 @@ module top(
         .clk        (clk),
         .kb_clk     (PS2Clk),
         .kb_key     (PS2Data),
+        
         .keycode    (keycode),
-        .valid_out  (valid),
-        .led        ({led_1, led_0})
+        .valid      (valid_ps2)
     );
     
+    keys_2_calc(
+        .clk(clk),
+        .keycode(keycode),
+        .result(result),
+        .start(valid_ps2),        
+        .idle(alu_idle),
+                 
+        .A(A),    
+        .B(B),    
+        .op(op),    
+        .final(final),
+        .valid(valid_calc),       
+        .print(print)        
+    );
     
+    // fake calculator
+    always@(posedge clk) begin
+        if(valid_calc) begin
+            alu_idle <= 0;
+            result <= A + B + op;
+        end else alu_idle <= 1;
+    end
     
     num_2_ascii converter (
         .clk        (clk),
-        .num        ({8'd0,keycode}),
-        .valid      (valid),
-        .uart_ready (ready),
+        .num        (final),
+        .start      (print),
+        .uart_ready (uart_ready),
+        
         .char       (ascii),
-//        .running    (),
         .uart_start (start)
     );
     
@@ -64,8 +93,9 @@ module top(
         .clk    (clk),
         .start  (start),
         .char   (ascii),
+        
         .tx     (tx),
-        .ready  (ready)
+        .ready  (uart_ready)
     );
 
         ALU ALU(

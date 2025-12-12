@@ -1,6 +1,7 @@
 ## log files
 *.log
 *.jou
+*.str
 
 ## dirs
 .Xil/
