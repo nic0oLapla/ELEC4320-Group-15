@@ -56,7 +56,7 @@ module top(
         .valid      (valid_ps2)
     );
     
-    keys_2_calc(
+    keys_2_calc controller (
         .clk(clk),
         .keycode(keycode),
         .result(result),

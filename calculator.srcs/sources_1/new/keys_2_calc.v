@@ -33,7 +33,7 @@ module keys_2_calc(
     output reg print        // ready to print for UART  (1-tick high when final ready to print)
     );
     
-    reg [3:0] digit = 0;
+    reg [31:0] num = 0;
     reg [1:0] count = 0;
     reg sign = 0; // 0 positive, 1 negative
     
@@ -52,6 +52,36 @@ module keys_2_calc(
                RES = 3;         // Waiting for result from ALU
     reg [1:0] state = KEY;
     
+    task digit(input [7:0] D); 
+        begin
+            num <= (8'd10 * num) + D;
+            count <= count + 1;
+            if (count == 2) begin
+                state <= PREP_NUM;
+            end
+        end 
+    endtask
+    
+    task binary(input [7:0] O);
+        begin
+            if (p_push == NUM) begin
+                    stack[rsp] <= O;
+                    rsp <= rsp + 1;
+                end else begin
+                    stack[rsp-1] <= O;  // Replace last entered operation (cannot have binary operation after anything except number)
+                end
+                p_push <= B_OP;
+        end
+    endtask
+    
+    task unary(input [7:0] O);
+        begin               
+            stack[rsp] <= O;
+            rsp <= rsp + 1;
+            p_push <= U_OP;
+        end
+    endtask
+    
     always@(posedge clk) begin
     valid <= 0;
     print <= 0;
@@ -61,33 +91,36 @@ module keys_2_calc(
         KEY: begin
             if (start && !p_start) begin   // Wait for signal from ps/2 receiver
             case (keycode)
-            8'h16, 8'h1E, 8'h26, 8'h25, 8'h2E, 8'h36, 8'h3D, 8'h3E, 8'h46, 8'h45: begin // Digits [1-9, 0]
-                digit <= (8'd10 * digit) + keycode;
-                count <= count + 1;
-                if (count == 3) begin
-                    state <= PREP_NUM;
-                end
-            end
+            8'h16: digit(8'd1);     // Digits [1-9, 0]
+            8'h1E: digit(8'd2);
+            8'h26: digit(8'd3);
+            8'h25: digit(8'd4);
+            8'h2E: digit(8'd5);
+            8'h36: digit(8'd6);
+            8'h3D: digit(8'd7);
+            8'h3E: digit(8'd8);
+            8'h46: digit(8'd9);
+            8'h45: digit(8'd0);
             
-            8'h4E: sign <= ~sign;                                                       // Negative
+            8'h4E: sign <= ~sign;   // Negative
             
-            8'h15, 8'h1D, 8'h24, 8'h2D, 8'h1C, 8'h1B: begin                             // Binary opcodes: [0-3, 10-11]
-                if (p_push == NUM) begin
-                    stack[rsp] <= keycode;
-                    rsp <= rsp + 1;
-                end else begin
-                    stack[rsp-1] <= keycode;  // Replace last entered operation (cannot have binary operation after anything except number)
-                end
-                p_push <= B_OP;
-            end
+            8'h15: binary(0);       // Binary opcodes: [0-3, 10-11]
+            8'h1D: binary(1);
+            8'h24: binary(2);
+            8'h2D: binary(3);
+            8'h1C: binary(10);
+            8'h1B: binary(11);
             
-            8'h2C, 8'h35, 8'h3C, 8'h43, 8'h44, 8'h4D, 8'h23, 8'h2B: begin               // Unary opcodes: [4-9, 12-13]
-                stack[rsp] <= keycode;
-                rsp <= rsp + 1;
-                p_push <= U_OP;
-            end
+            8'h2C: unary(4);        // Unary opcodes: [4-9, 12-13]
+            8'h35: unary(5);
+            8'h3C: unary(6);
+            8'h43: unary(7);
+            8'h44: unary(8);
+            8'h4D: unary(9);
+            8'h23: unary(12);
+            8'h2B: unary(13);
             
-            8'h5A: begin                                                                // Enter - print result
+            8'h5A: begin            // Enter - print result
                 if (!empty) begin
                     final <= stack[rsp-1];
                     rsp <= rsp - 1;
@@ -95,14 +128,13 @@ module keys_2_calc(
                 end
             end           
             endcase
-            count <= count + 1;
         end
         end
         
         PREP_NUM: begin
-            if (digit != 0) begin
-                if (!sign) digit <= digit << 10;
-                else digit <= -(digit << 10);
+            if (num != 0) begin
+                if (!sign) num <= num << 10;
+                else num <= -(num << 10);
             end
             state <= PUSH_NUM;
         end
@@ -110,20 +142,25 @@ module keys_2_calc(
         PUSH_NUM: begin
             case (p_push) // If previous entry was a number replace it, else send calc to ALU
             NUM: begin
-                stack[rsp-1] <= digit;  
+                if (empty) begin
+                    stack[rsp] <= num;
+                    rsp <= rsp + 1;
+                end else begin
+                    stack[rsp-1] <= num; 
+                end 
                 state <= KEY;
             end
             B_OP: begin
                 op <= stack[rsp-1];
                 A <= stack[rsp-2];
-                B <= digit;
+                B <= num;
                 rsp <= rsp - 2;
                 valid <= 1;
                 state <= RES;
             end
             U_OP: begin
                 op <= stack[rsp-1];
-                A <= digit;
+                A <= num;
                 B <= 0;
                 rsp <= rsp - 1;
                 valid <= 1;
@@ -131,7 +168,7 @@ module keys_2_calc(
             end
             endcase   
 
-            digit <= 0;
+            num <= 0;
             count <= 0;
             sign <= 0;
         end

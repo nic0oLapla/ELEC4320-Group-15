@@ -22,7 +22,7 @@
 
 module num_2_ascii(
     input clk,
-    input [15:0] num,
+    input [31:0] num,
     input start,
     input uart_ready,
     output reg [7:0] char,
@@ -30,15 +30,15 @@ module num_2_ascii(
     output reg uart_start
     );
 
-    reg [13:0] div;         // "divisor"
-    reg [15:0] rem;         // remainder
+    reg [31:0] div;         // "divisor"
+    reg [31:0] rem;         // remainder
     reg [3:0] curr_digit;   // value of current digit
-    reg [2:0] digit_idx;    // current digit pos (4 to 0)
+    reg [3:0] digit_idx;    // current digit pos (0123456.8910)
     reg leading_zeros;      // flag for leading zeros
 
     // State Machine
-    localparam IDLE = 0, SUB = 1, SEND = 2, WAIT_UART = 3;
-    reg [1:0] state = IDLE;
+    localparam IDLE = 0, SUB = 1, DOT = 2, SEND = 3, WAIT_UART = 4;
+    reg [2:0] state = IDLE;
 
     always @(posedge clk) begin
         case (state)
@@ -47,8 +47,10 @@ module num_2_ascii(
             uart_start <= 0;
             if (start) begin
                 running <= 1;       // block calculator
+                if (num[31]) begin
+                    
                 rem <= num;         // load result 
-                digit_idx <= 0;     // start at 10,000s place
+                digit_idx <= 0;     // start at 1,000,000s place
                 curr_digit <= 0;
                 leading_zeros <= 1; // assume leading zeros
                 state <= SUB;       // start calculating
@@ -60,11 +62,17 @@ module num_2_ascii(
         // SUBTRACT UNTIL WE FIND THE CURRENT DIGIT'S VALUE
         SUB: begin
             case (digit_idx)                    // probably faster than using a power circuit
-                0: div = 10000;
-                1: div = 1000;
-                2: div = 100;
-                3: div = 10;
-                4: div = 1;
+                0: div = 1000000000;
+                1: div = 100000000;
+                2: div = 10000000;
+                3: div = 1000000;
+                4: div = 100000;
+                5: div = 10000;
+                6: div = 1000;
+                // 7 is decimal point
+                8: div = 100;
+                9: div = 10;
+                10: div = 1;
             endcase
 
             if (rem >= div) begin               // still going, subtract 10^idx and loop again
@@ -77,18 +85,22 @@ module num_2_ascii(
 
         // DIGIT FOUND, SEND CHARACTER TO UART
         SEND: begin
-            if (digit_idx == 5) begin                                                   // send CR
+            if (digit_idx == 7) begin
+                char <= 8'h2E;                                                          // load .
+                uart_start <= 1;                                                        // trigger the UART
+                state <= WAIT_UART;                                                     // wait for UART sender
+            end else if (digit_idx == 11) begin                                         // send CR
                 char <= 8'h0D;                                                          // load CR
                 uart_start <= 1;                                                        // trigger the UART
                 state <= WAIT_UART;                                                     // wait for UART sender
-            end else if (digit_idx == 6) begin                                          // send LF
+            end else if (digit_idx == 12) begin                                         // send LF
                 char <= 8'h0A;                                                          // load LF
                 uart_start <= 1;                                                        // trigger the UART
                 state <= WAIT_UART;                                                     // wait for UART sender
-            end else if (leading_zeros && (curr_digit == 0) && (digit_idx != 4)) begin  // skip leading zeros but not if last digit
-                 digit_idx <= digit_idx + 1;
-                 curr_digit <= 0;
-                 state <= SUB;
+            end else if (leading_zeros && (curr_digit == 0) && (digit_idx != 10)) begin  // skip leading zeros but not if last digit
+                digit_idx <= digit_idx + 1;
+                curr_digit <= 0;
+                state <= SUB;
             end else begin
                 leading_zeros <= 0;                                                     // found a valid digit
                 char <= {4'h3, curr_digit};                                             // convert digit to ascii
@@ -102,13 +114,13 @@ module num_2_ascii(
             uart_start <= 0;                        // drop start signal
             
             if (uart_ready && !uart_start) begin
-                if (digit_idx == 6) begin           // return to idle
+                if (digit_idx == 12) begin           // return to idle
                     state <= IDLE;
                     running <= 0;
                 end else begin                      // next character
                     digit_idx <= digit_idx + 1;
                     curr_digit <= 0;
-                    if (digit_idx <= 4)             // still going, find next digit
+                    if (digit_idx <= 10)             // still going, find next digit
                         state <= SUB;
                     else                            // final digit done, send CR
                         state <= SEND;
