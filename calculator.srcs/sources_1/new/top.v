@@ -97,5 +97,18 @@ module top(
         .tx     (tx),
         .ready  (uart_ready)
     );
+
+        ALU ALU(
+        .clk        (clk_300MHz),
+        .rst        (reset),           // Added Reset
+        .valid_in   (valid_in),   // Handshake: new operation is valid
+        .in_A       (ALU_in_A),
+        .in_B       (ALU_in_B),
+        .opcode     (OPcode),
+        .valid_out  (valid_out),    // Handshake: result is valid
+        .ALU_out    (ALU_out)
+    );
+
     
+
 endmodule
