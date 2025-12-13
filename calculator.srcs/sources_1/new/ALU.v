@@ -32,6 +32,78 @@ module ALU(
 );
 
     reg [31:0] reg_A, reg_B;
+
+    //initialize cordic and factorial modules here
+
+  // Fixed-point division (using non-restoring division)
+    wire [31:0] div_result;
+    divider divider_inst (
+        .clk(clk),
+        .start(start && op==OP_DIV),
+        .dividend(a),
+        .divisor(b),
+        .quotient(div_result),
+        .done(div_done)
+    );
+
+    // Square root (using non-restoring square root algorithm)
+    wire [31:0] sqrt_result;
+    sqrt sqrt_inst (
+        .clk(clk),
+        .start(start && op==OP_SQRT),
+        .radicand(a),
+        .root(sqrt_result),
+        .done(sqrt_done)
+    );
+
+    // Trigonometric and hyperbolic functions using CORDIC
+    wire [31:0] cos_result, sin_result, tan_result;
+    wire [31:0] arccos_result, arcsin_result, arctan_result;
+    wire [31:0] log_result, exp_result, power_result;
+
+    // CORDIC module for circular functions
+    wire [31:0] cordic_circular_x, cordic_circular_y, cordic_circular_z;
+    wire cordic_circular_done;
+    cordic_circular cordic_circular_inst (
+        .clk(clk),
+        .start(start && (op==OP_COS || op==OP_SIN || op==OP_TAN || op==OP_ARCCOS || op==OP_ARCSIN || op==OP_ARCTAN)),
+        .mode(op==OP_ARCTAN || op==OP_ARCSIN || op==OP_ARCCOS ? 1 : 0), // 0 for rotation, 1 for vectoring
+        .x_in(a),
+        .y_in(b),
+        .z_in(op==OP_ARCTAN ? b : a), // for arctan, we set x=a, y=b, so that result = arctan(y/x)
+        .x_out(cordic_circular_x),
+        .y_out(cordic_circular_y),
+        .z_out(cordic_circular_z),
+        .done(cordic_circular_done)
+    );
+
+    // CORDIC module for hyperbolic functions
+    wire [31:0] cordic_hyperbolic_x, cordic_hyperbolic_y, cordic_hyperbolic_z;
+    wire cordic_hyperbolic_done;
+    cordic_hyperbolic cordic_hyperbolic_inst (
+        .clk(clk),
+        .start(start && (op==OP_LOG || op==OP_EXP || op==OP_POWER)),
+        .mode(op==OP_LOG ? 1 : 0), // 0 for rotation, 1 for vectoring
+        .x_in(a),
+        .y_in(b),
+        .z_in(b),
+        .x_out(cordic_hyperbolic_x),
+        .y_out(cordic_hyperbolic_y),
+        .z_out(cordic_hyperbolic_z),
+        .done(cordic_hyperbolic_done)
+    );
+
+    // Factorial
+    wire [31:0] fact_result;
+    wire fact_done;
+    factorial factorial_inst (
+        .clk(clk),
+        .start(start && op==OP_FACT),
+        .n(a),
+        .result(fact_result),
+        .done(fact_done)
+    );
+
     always @(posedge clk or posedge rst) begin
         reg_A <= in_A;
         reg_B <= in_B;
