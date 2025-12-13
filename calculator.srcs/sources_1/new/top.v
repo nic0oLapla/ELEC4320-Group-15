@@ -111,32 +111,7 @@ module top(
         .tx     (tx),
         .ready  (uart_ready)
     );
-
-    always @(posedge clk_300MHz) begin
-        case (state)
-            `S_STARTUP`: begin
-                if (locked)
-                    next_state = `S_IDLE`;
-            end
-            `S_IDLE`: begin
-                if (valid_calc) begin
-                    alu_valid_in = 1'b1;
-                    next_state = `S_CALC`;
-                end
-            end
-            `S_CALC`: begin
-                if (alu_valid_out)
-                    next_state = `S_RESULT_READY`;
-            end
-            `S_RESULT_READY`: begin
-                result = ALU_out;
-                next_state = `S_IDLE`;
-            end
-        endcase
-    end
-
-    assign alu_idle = (state == `S_IDLE`);
-
+    
     ALU ALU_inst (
         .clk(clk_300MHz),
         .rst(reset),
@@ -149,5 +124,30 @@ module top(
     );
 
     
+
+    always @(posedge clk_300MHz) begin
+        case (state)
+            `S_STARTUP: begin
+                if (locked)
+                    next_state = `S_IDLE;
+            end
+            `S_IDLE: begin
+                if (valid_calc) begin
+                    alu_valid_in = 1'b1;
+                    next_state <= `S_CALC;
+                end
+            end
+            `S_CALC: begin
+                if (alu_valid_out)
+                    next_state <= `S_RESULT_READY;
+            end
+            `S_RESULT_READY: begin
+                //fix
+                next_state = `S_IDLE;
+            end
+        endcase
+    end
+
+    assign alu_idle = (state == `S_IDLE);
 
 endmodule
