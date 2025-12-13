@@ -22,41 +22,36 @@
 
 module ALU(
     input        clk,
-    input        rst,           // Added Reset
     input        valid_in,      // Handshake: new operation is valid
     input [31:0] in_A,
     input [31:0] in_B,
     input [3:0]  opcode,
     output reg   valid_out,     // Handshake: result is valid
-    output reg [31:0] ALU_out
+    output reg [31:0] ALU_out,
+    output reg   idle
 );
 
-    reg [31:0] reg_A, reg_B;
-    always @(posedge clk or posedge rst) begin
-        reg_A <= in_A;
-        reg_B <= in_B;
-        if (rst) begin
-            reg_A <= 32'b0;
-            reg_B <= 32'b0;
-            ALU_out <= 32'b0;
-            valid_out <= 1'b0;
-        end else if (valid_in) begin
+    always @(posedge clk) begin
+        idle <= 1;
+        if (valid_in) begin
             case (opcode)
-                `ADD:     ALU_out <= reg_A + reg_B;
-                `SUB:     ALU_out <= reg_A - reg_B;
-                `MULT:    ALU_out <= reg_A * reg_B;
-                `DIV:     ALU_out <= reg_A / reg_B;
+                0:  ALU_out <= in_A + in_B;
+                1:  ALU_out <= in_A - in_B;
+                2:  ALU_out <= in_A * in_B;
+                3:  ALU_out <= in_A / in_B;
+               
+                4:  ALU_out <= in_A / 2;  // TODO: Square Root of reg_A
+                5:  ALU_out <= 32'b0;  // TODO: Cosine of reg_A
+                6:  ALU_out <= 32'b0;  // TODO: Tangent of reg_A
+                7:  ALU_out <= 32'b0;  // TODO: Arcsine of reg_A
+                8:  ALU_out <= 32'b0;  // TODO: Arccosine of reg_A
+                9:  ALU_out <= 32'b0;  // TODO: Arctangent of reg_A
                 
-                `SQRT:    ALU_out <= 32'b0;  // TODO: Square Root of reg_A
-                `COS:     ALU_out <= 32'b0;  // TODO: Cosine of reg_A
-                `TAN:     ALU_out <= 32'b0;  // TODO: Tangent of reg_A
-                `ARCSIN:  ALU_out <= 32'b0;  // TODO: Arcsine of reg_A
-                `ARCCOS:  ALU_out <= 32'b0;  // TODO: Arccosine of reg_A
-                `ARCTAN:  ALU_out <= 32'b0;  // TODO: Arctangent of reg_A
-                `LOG:     ALU_out <= 32'b0;  // TODO: Logarithm base reg_A of reg_B
-                `POW:     ALU_out <= 32'b0;  // TODO: reg_A raised to power reg_B
-                `EXP:     ALU_out <= 32'b0;  // TODO: e raised to power reg_A
-                `FACT:    ALU_out <= 32'b0;  // TODO: Factorial of reg_A
+                10: ALU_out <= 32'b0;  // TODO: Logarithm base reg_A of reg_B
+                11: ALU_out <= 32'b0;  // TODO: reg_A raised to power reg_B
+                
+                12: ALU_out <= 32'b0;  // TODO: e raised to power reg_A
+                13: ALU_out <= 32'b0;  // TODO: Factorial of reg_A
                 default:  ALU_out <= 32'b0;
             endcase
             valid_out <= 1'b1;

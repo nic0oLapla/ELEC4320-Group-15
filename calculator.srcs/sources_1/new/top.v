@@ -29,60 +29,85 @@ module top(
     output        led_1
 );
 
-    wire [7:0]  keycode;
-    wire        valid_ps2;
+    wire [7:0]  ps2_code;
+    wire        ps2_valid;
+    
+    wire [31:0] key_out;
+    wire        key_type;
+    wire        key_valid;
+    wire        key_enter;
+    
     wire [31:0] A;
     wire [31:0] B;
     wire [3:0]  op;
-    wire [31:0] final;
-    wire        valid_calc;
-    wire        print;
+    wire [31:0] acc_final;
+    wire        acc_valid;
+    wire        acc_print;
+    
+    wire [31:0] alu_result;
+    wire        alu_idle;
+    wire        alu_valid;
+    
     wire [7:0]  ascii;
     wire        uart_ready;
     wire        uart_start;
     
-    reg  [31:0] result = 21 << 10;
-    wire        alu_idle;
+    
     
     ps2_receiver ps2_in (
         .clk        (clk),
         .kb_clk     (PS2Clk),
         .kb_key     (PS2Data),
         
-        .keycode    (keycode),
-        .valid      (valid_ps2)
+        .keycode    (ps2_code),
+        .valid      (ps2_valid)
     );
     
-    keys_2_calc controller (
+    keys_2_calc k2c (
         .clk(clk),
-        .keycode(keycode),
-        .result(result),
-        .start(valid_ps2),        
-        .idle(alu_idle),
+        .keycode(ps2_code),
+        .start(ps2_valid),        
                  
-        .A(A),    
-        .B(B),    
-        .op(op),    
-        .final(final),
-        .valid(valid_calc),       
-        .print(print)        
+        .out(key_out),
+        .out_type(key_type), 
+        .out_valid(key_valid),
+        .enter(key_enter)        
     );
     
-    reg [3:0] i = 0;
-    assign alu_idle = i == 0;
+    accumulator acc (
+        .clk(clk),
+        .key(key_out),
+        .res(alu_result),
+        .start_key(key_valid),
+        .start_alu(alu_valid),
+        .type_key(key_type),
+        .idle(alu_idle),
+        .enter(key_enter),
+        
+        .A(A),
+        .B(B),
+        .op(op),
+        .valid(acc_valid),
+        .final(acc_final),
+        .print(acc_print)
+    );
     
-    // fake calculator
-    always@(posedge clk) begin
-        if(valid_calc) begin
-            i <= 15;
-            result <= A + B + (op << 10);
-        end else if (i > 0) i <= i - 1;
-    end
+    ALU alu (
+        .clk(clk),
+        .valid_in(acc_valid),      // Handshake: new operation is valid
+        .in_A(A),
+        .in_B(B),
+        .opcode(op),
+        
+        .valid_out(alu_valid),     // Handshake: result is valid
+        .ALU_out(alu_result),
+        .idle(alu_idle)
+    );
     
-    num_2_ascii converter (
+    num_2_ascii n2a (
         .clk        (clk),
-        .num        (final),
-        .start      (print),
+        .num        (acc_final),
+        .start      (acc_print),
         .uart_ready (uart_ready),
         
         .char       (ascii),
@@ -97,18 +122,5 @@ module top(
         .tx     (tx),
         .ready  (uart_ready)
     );
-
-        ALU ALU(
-        .clk        (clk_300MHz),
-        .rst        (reset),           // Added Reset
-        .valid_in   (valid_in),   // Handshake: new operation is valid
-        .in_A       (ALU_in_A),
-        .in_B       (ALU_in_B),
-        .opcode     (OPcode),
-        .valid_out  (valid_out),    // Handshake: result is valid
-        .ALU_out    (ALU_out)
-    );
-
     
-
 endmodule

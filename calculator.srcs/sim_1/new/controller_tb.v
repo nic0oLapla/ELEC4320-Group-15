@@ -22,46 +22,77 @@
 
 module controller_tb;
     reg clk;
-    reg [7:0] keycode;
-    reg [31:0] result;
-    reg start;
-    reg idle;
+    
+    reg [7:0]  ps2_code;
+    reg        ps2_valid;
+    
+    wire [31:0] key_out;
+    wire        key_type;
+    wire        key_valid;
+    wire        key_enter;
     
     wire [31:0] A;
     wire [31:0] B;
-    wire [3:0] op;
-    wire [31:0] final;
-    wire valid;
-    wire print;
+    wire [3:0]  op;
+    wire [31:0] acc_final;
+    wire        acc_valid;
+    wire        acc_print;
     
-    reg uart_ready;
+    wire [31:0] alu_result;
+    wire        alu_idle;
+    wire        alu_valid;
     
-    wire [7:0] ascii;
-    wire uart_start;
+    wire [7:0]  ascii;
+    reg         uart_ready;
     
     keys_2_calc k2c (
         .clk(clk),
-        .keycode(keycode),
-        .result(result),
-        .start(start),        
-        .idle(idle),
+        .keycode(ps2_code),
+        .start(ps2_valid),        
                  
-        .A(A),    
-        .B(B),    
-        .op(op),    
-        .final(final),
-        .valid(valid),       
-        .print(print)        
+        .out(key_out),
+        .out_type(key_type), 
+        .out_valid(key_valid),
+        .enter(key_enter)        
+    );
+    
+    accumulator acc (
+        .clk(clk),
+        .key(key_out),
+        .res(alu_result),
+        .start_key(key_valid),
+        .start_alu(alu_valid),
+        .type_key(key_type),
+        .idle(alu_idle),
+        .enter(key_enter),
+        
+        .A(A),
+        .B(B),
+        .op(op),
+        .valid(acc_valid),
+        .final(acc_final),
+        .print(acc_print)
+    );
+    
+    ALU alu (
+        .clk(clk),
+        .valid_in(acc_valid),      // Handshake: new operation is valid
+        .in_A(A),
+        .in_B(B),
+        .opcode(op),
+        
+        .valid_out(alu_valid),     // Handshake: result is valid
+        .ALU_out(alu_result),
+        .idle(alu_idle)
     );
     
     num_2_ascii n2a (
         .clk        (clk),
-        .num        (final),
-        .start      (print),
+        .num        (acc_final),
+        .start      (acc_print),
         .uart_ready (uart_ready),
         
-        .char       (ascii),
-        .uart_start (uart_start)
+        .char       (ascii)
     );
     
     initial begin
@@ -70,18 +101,40 @@ module controller_tb;
       end
 
     initial begin
-        keycode = 0; result = 0; start = 0; idle = 1; uart_ready = 1; #100
+        ps2_code = 0; ps2_valid = 0; uart_ready = 1; #100
 
-        keycode = 8'h16; start = 1; #10;
-        start = 0; #90
-        keycode = 8'h1E; start = 1; #10;
-        start = 0; #90
-        keycode = 8'h16; start = 1; #10;
-        start = 0; #90
+        ps2_code = 8'h16; ps2_valid = 1; #10
+        ps2_valid = 0; #90
+        ps2_code = 8'h1E; ps2_valid = 1; #10
+        ps2_valid = 0; #90
+        ps2_code = 8'h16; ps2_valid = 1; #10
+        ps2_valid = 0; #990
         
-        keycode = 8'h5A; start = 1; #10;
-        start = 0; uart_ready = 1; #9000
+        ps2_code = 8'h15; ps2_valid = 1; #10
+        ps2_valid = 0; #990
         
+        ps2_code = 8'h16; ps2_valid = 1; #10
+        ps2_valid = 0; #90
+        ps2_code = 8'h1E; ps2_valid = 1; #10
+        ps2_valid = 0; #90
+        ps2_code = 8'h16; ps2_valid = 1; #10
+        ps2_valid = 0; #990
+        
+        ps2_code = 8'h15; ps2_valid = 1; #10
+        ps2_valid = 0; #990
+        
+        ps2_code = 8'h16; ps2_valid = 1; #10
+        ps2_valid = 0; #90
+        ps2_code = 8'h1E; ps2_valid = 1; #10
+        ps2_valid = 0; #90
+        ps2_code = 8'h16; ps2_valid = 1; #10
+        ps2_valid = 0; #990
+        
+        ps2_code = 8'h5A; ps2_valid = 1; #10
+        ps2_valid = 0; #990
+        
+        
+
 
         $display("Simulation Finished at time %t", $time);
         $finish;
