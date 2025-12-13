@@ -31,21 +31,18 @@ module top(
 
     wire [7:0]  keycode;
     wire        valid_ps2;
-    reg  [31:0] result;
-    reg         alu_idle;
-    wire        A;
-    wire        B;
-    wire        op;
-    wire        final;
+    wire [31:0] A;
+    wire [31:0] B;
+    wire [3:0]  op;
+    wire [31:0] final;
     wire        valid_calc;
     wire        print;
     wire [7:0]  ascii;
     wire        uart_ready;
-
-    reg         CLK50MHZ=0;
-    always @(posedge(clk))begin
-        CLK50MHZ<=~CLK50MHZ;
-    end
+    wire        uart_start;
+    
+    reg  [31:0] result = 21 << 10;
+    wire        alu_idle;
     
     ps2_receiver ps2_in (
         .clk        (clk),
@@ -71,12 +68,15 @@ module top(
         .print(print)        
     );
     
+    reg [3:0] i = 0;
+    assign alu_idle = i == 0;
+    
     // fake calculator
     always@(posedge clk) begin
         if(valid_calc) begin
-            alu_idle <= 0;
-            result <= A + B + op;
-        end else alu_idle <= 1;
+            i <= 15;
+            result <= A + B + (op << 10);
+        end else if (i > 0) i <= i - 1;
     end
     
     num_2_ascii converter (
@@ -86,12 +86,12 @@ module top(
         .uart_ready (uart_ready),
         
         .char       (ascii),
-        .uart_start (start)
+        .uart_start (uart_start)
     );
     
     uart_sender uart_out (
         .clk    (clk),
-        .start  (start),
+        .start  (uart_start),
         .char   (ascii),
         
         .tx     (tx),

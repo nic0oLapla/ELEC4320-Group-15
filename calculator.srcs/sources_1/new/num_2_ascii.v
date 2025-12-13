@@ -26,108 +26,136 @@ module num_2_ascii(
     input start,
     input uart_ready,
     output reg [7:0] char,
-    output reg running,
-    output reg uart_start
+    output reg uart_start,
+    output wire  running
     );
 
-    reg [31:0] div;         // "divisor"
-    reg [31:0] rem;         // remainder
-    reg [3:0] curr_digit;   // value of current digit
-    reg [3:0] digit_idx;    // current digit pos (0123456.8910)
-    reg leading_zeros;      // flag for leading zeros
+    reg [31:0] div;             // "divisor"
+    reg [21:0] int_rem;         // integer remainder
+    reg [9:0] frac_rem;         // fractional remainder
+    reg [3:0] curr_digit;       // value of current digit
+    reg [3:0] digit_idx;        // current digit pos (0123456.8910)
+    reg [3:0] digitised [0:9];  // full number split into digits
+    reg leading_zeros;          // flag for leading zeros
+    reg neg;                    // flag for negative
+    reg dot;                    // have we printed the dot yet?
 
     // State Machine
-    localparam IDLE = 0, SUB = 1, DOT = 2, SEND = 3, WAIT_UART = 4;
+    localparam IDLE = 0, SUB = 1, SEND_INT = 2, SEND_FRAC = 3, SEND_CR = 4, SEND_LF = 5;
     reg [2:0] state = IDLE;
 
     always @(posedge clk) begin
+        uart_start <= 0;
         case (state)
         // WAITING FOR NEW NUMBER FROM CALCULATOR
         IDLE: begin
-            uart_start <= 0;
-            if (start) begin
-                running <= 1;       // block calculator
+            if (start) begin 
                 if (num[31]) begin
-                    
-                rem <= num;         // load result 
-                digit_idx <= 0;     // start at 1,000,000s place
+                    neg <= 1;
+                    int_rem <= (~num + 1) >> 10; // scale by 1/1024
+                    frac_rem <= ((~num + 1) & 10'h3FF) * 1000 >> 10; // mask lower 10 bits, scale by 1000/1024
+                end else begin
+                    neg <= 0;
+                    int_rem <= num >> 10; // scale by 1/1024
+                    frac_rem <= (num & 10'h3FF) * 1000 >> 10;; // mask lower 10 bits, scale by 1000/1024
+                end
                 curr_digit <= 0;
+                digit_idx <= 0;     // start at 1,000,000s place
                 leading_zeros <= 1; // assume leading zeros
+                dot <= 1;
                 state <= SUB;       // start calculating
-            end else begin
-                running <= 0;
             end
         end
 
         // SUBTRACT UNTIL WE FIND THE CURRENT DIGIT'S VALUE
         SUB: begin
             case (digit_idx)                    // probably faster than using a power circuit
-                0: div = 1000000000;
-                1: div = 100000000;
-                2: div = 10000000;
-                3: div = 1000000;
-                4: div = 100000;
-                5: div = 10000;
-                6: div = 1000;
-                // 7 is decimal point
-                8: div = 100;
-                9: div = 10;
-                10: div = 1;
+                0: div = 1000000;
+                1: div = 100000;
+                2: div = 10000;
+                3: div = 1000;
+                4: div = 100;
+                5: div = 10;
+                6: div = 1;
+                7: div = 100;
+                8: div = 10;
+                9: div = 1;
             endcase
-
-            if (rem >= div) begin               // still going, subtract 10^idx and loop again
-                rem <= rem - div;
-                curr_digit <= curr_digit + 1;
-            end else begin                      // digit value found, move on to sending char
-                state <= SEND;
-            end
-        end
-
-        // DIGIT FOUND, SEND CHARACTER TO UART
-        SEND: begin
-            if (digit_idx == 7) begin
-                char <= 8'h2E;                                                          // load .
-                uart_start <= 1;                                                        // trigger the UART
-                state <= WAIT_UART;                                                     // wait for UART sender
-            end else if (digit_idx == 11) begin                                         // send CR
-                char <= 8'h0D;                                                          // load CR
-                uart_start <= 1;                                                        // trigger the UART
-                state <= WAIT_UART;                                                     // wait for UART sender
-            end else if (digit_idx == 12) begin                                         // send LF
-                char <= 8'h0A;                                                          // load LF
-                uart_start <= 1;                                                        // trigger the UART
-                state <= WAIT_UART;                                                     // wait for UART sender
-            end else if (leading_zeros && (curr_digit == 0) && (digit_idx != 10)) begin  // skip leading zeros but not if last digit
-                digit_idx <= digit_idx + 1;
-                curr_digit <= 0;
-                state <= SUB;
-            end else begin
-                leading_zeros <= 0;                                                     // found a valid digit
-                char <= {4'h3, curr_digit};                                             // convert digit to ascii
-                uart_start <= 1;                                                        // trigger the UART
-                state <= WAIT_UART;                                                     // wait for UART sender
-            end
-        end
-
-        // WAITING FOR UART TO SEND PREVIOUS CHARACTER
-        WAIT_UART: begin
-            uart_start <= 0;                        // drop start signal
             
-            if (uart_ready && !uart_start) begin
-                if (digit_idx == 12) begin           // return to idle
-                    state <= IDLE;
-                    running <= 0;
-                end else begin                      // next character
+            if (digit_idx <= 6 && int_rem >= div) begin // INT: still going, subtract div and loop again
+                int_rem <= int_rem - div;
+                curr_digit <= curr_digit + 1;
+            end else if (digit_idx >= 7 && frac_rem >= div) begin // FRAC: still going, subtract div and loop again
+                frac_rem <= frac_rem - div;
+                curr_digit <= curr_digit + 1;
+            end else begin // digit value found, move on to next digit
+                digitised[digit_idx] <= curr_digit;
+                curr_digit <= 0;
+                if (digit_idx == 9) begin
+                    digit_idx <= 0;
+                    state <= SEND_INT;
+                end else begin
                     digit_idx <= digit_idx + 1;
-                    curr_digit <= 0;
-                    if (digit_idx <= 10)             // still going, find next digit
-                        state <= SUB;
-                    else                            // final digit done, send CR
-                        state <= SEND;
                 end
             end
         end
+
+        // PRINTING SIGN AND INTEGER DIGITS
+        SEND_INT: begin
+        if (uart_ready) begin
+            if (neg) begin // print negative sign if needed
+                char <= 8'h2D;
+                uart_start <= 1;
+                neg <= 0;
+            end else begin
+                if (digit_idx == 6) begin // always print last integer digit, swap to printing fractional digits
+                    char <= {4'h3, digitised[digit_idx]};
+                    uart_start <= 1;                     
+                    state <= SEND_FRAC; 
+                end else if (!leading_zeros || digitised[digit_idx] != 0) begin // print valid digit, skip leading zeros             
+                    char <= {4'h3, digitised[digit_idx]};
+                    uart_start <= 1;   
+                    leading_zeros <= 0;                   
+                end
+                digit_idx <= digit_idx + 1;  
+            end              
+        end
+        end
+        
+        // PRINTING DOT AND FRACTIONAL DIGITS
+        SEND_FRAC: begin
+        if (uart_ready) begin
+            if (dot) begin
+                char <= 8'h2E;   // load full stop (.)  
+                uart_start <= 1; // trigger the UART    
+                dot <= 0;        // disable dot flag
+            end else begin
+                char <= {4'h3, digitised[digit_idx]};
+                uart_start <= 1;            
+                if (digit_idx == 9) state <= SEND_CR;
+                else digit_idx <= digit_idx + 1;
+            end
+        end
+        end
+            
+        // PRINTING NEWLINE CHARACTERS
+        SEND_CR: begin
+        if (uart_ready) begin
+            char <= 8'h0D;
+            uart_start <= 1;
+            state <= SEND_LF;
+        end
+        end
+        SEND_LF: begin
+        if (uart_ready) begin
+            char <= 8'h0A;
+            uart_start <= 1;
+            state <= IDLE;
+        end
+        end
         endcase
     end
+    
+    assign running = state != IDLE;
     
 endmodule

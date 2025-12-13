@@ -62,22 +62,26 @@ module keys_2_calc(
         end 
     endtask
     
-    task binary(input [7:0] O);
+    task binary(input [3:0] O);
         begin
             if (p_push == NUM) begin
-                    stack[rsp] <= O;
+                    stack[rsp] <= {28'b0, O};
                     rsp <= rsp + 1;
                 end else begin
-                    stack[rsp-1] <= O;  // Replace last entered operation (cannot have binary operation after anything except number)
+                    stack[rsp-1] <= {28'b0, O};  // Replace last entered operation (cannot have binary operation after anything except number)
                 end
+                final <= O << 10; // print raw opcode for now
+                print <= 1;
                 p_push <= B_OP;
         end
     endtask
     
-    task unary(input [7:0] O);
+    task unary(input [3:0] O);
         begin               
-            stack[rsp] <= O;
+            stack[rsp] <= {28'b0, O};
             rsp <= rsp + 1;
+            final <= O << 10; // print raw opcode for now
+            print <= 1;
             p_push <= U_OP;
         end
     endtask
@@ -140,6 +144,8 @@ module keys_2_calc(
         end
         
         PUSH_NUM: begin
+            final <= num; // display input whenever we get it
+            print <= 1;
             case (p_push) // If previous entry was a number replace it, else send calc to ALU
             NUM: begin
                 if (empty) begin
@@ -174,6 +180,7 @@ module keys_2_calc(
         end
     
         RES: begin                  // Already know ALU is idle because of top-level if (line 69)
+        if (!valid) begin
             if (empty) begin
                 stack[rsp] <= result;
                 rsp <= rsp + 1;
@@ -196,6 +203,7 @@ module keys_2_calc(
                 valid <= 1; // Tell ALU we have a calculation for it
                 state <= RES;
             end
+        end
         end
         
         endcase
