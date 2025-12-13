@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "define.v"
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -68,16 +69,29 @@ module top(
         .print(print)        
     );
     
-    reg [3:0] i = 0;
-    assign alu_idle = i == 0;
+    wire        locked;
+    wire        clk_300MHz;
+    wire        reset = 0; // Assuming active-high reset, connect to a button if available
+
+    // FSM state definitions in define.v
+    reg [1:0] state = `S_STARTUP, next_state;
+
+    // ALU signals
+    reg         alu_valid_in;
+    wire        alu_valid_out;
+    wire [31:0] ALU_out;
     
-    // fake calculator
-    always@(posedge clk) begin
-        if(valid_calc) begin
-            i <= 15;
-            result <= A + B + (op << 10);
-        end else if (i > 0) i <= i - 1;
-    end
+    // Connect LEDs
+    assign led_0 = locked;
+    assign led_1 = ~state[0]; // Example: led_1 is on when not in IDLE
+
+    clk_300_mhz clk_gen (
+        .clk_out1(clk_300MHz),
+        .reset(reset),
+        .locked(locked),
+        .clk_in1(clk)
+    );
+
     
     num_2_ascii converter (
         .clk        (clk),
@@ -98,15 +112,40 @@ module top(
         .ready  (uart_ready)
     );
 
-        ALU ALU(
-        .clk        (clk_300MHz),
-        .rst        (reset),           // Added Reset
-        .valid_in   (valid_in),   // Handshake: new operation is valid
-        .in_A       (ALU_in_A),
-        .in_B       (ALU_in_B),
-        .opcode     (OPcode),
-        .valid_out  (valid_out),    // Handshake: result is valid
-        .ALU_out    (ALU_out)
+    always @(posedge clk_300MHz) begin
+        case (state)
+            `S_STARTUP`: begin
+                if (locked)
+                    next_state = `S_IDLE`;
+            end
+            `S_IDLE`: begin
+                if (valid_calc) begin
+                    alu_valid_in = 1'b1;
+                    next_state = `S_CALC`;
+                end
+            end
+            `S_CALC`: begin
+                if (alu_valid_out)
+                    next_state = `S_RESULT_READY`;
+            end
+            `S_RESULT_READY`: begin
+                result = ALU_out;
+                next_state = `S_IDLE`;
+            end
+        endcase
+    end
+
+    assign alu_idle = (state == `S_IDLE`);
+
+    ALU ALU_inst (
+        .clk(clk_300MHz),
+        .rst(reset),
+        .valid_in(alu_valid_in),
+        .in_A(A),
+        .in_B(B),
+        .opcode(op),
+        .valid_out(alu_valid_out),
+        .ALU_out(ALU_out)
     );
 
     

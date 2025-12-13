@@ -37,3 +37,9 @@
 `define EXP           4'd12   // Latency: 4 cycles (Exponential)
 `define FACT          4'd13   // Latency: 3 cycles (Factorial)
 
+// FSM States for top.v
+`define S_STARTUP 2'b00
+`define S_IDLE    2'b01
+`define S_CALC    2'b10
+`define S_RESULT_READY 2'b11
+
