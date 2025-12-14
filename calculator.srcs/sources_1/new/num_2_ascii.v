@@ -57,7 +57,7 @@ module num_2_ascii(
                 end else begin
                     neg <= 0;
                     int_rem <= num >> 10; // scale by 1/1024
-                    frac_rem <= (num & 10'h3FF) * 1000 >> 10;; // mask lower 10 bits, scale by 1000/1024
+                    frac_rem <= (num & 10'h3FF) * 1000 >> 10; // mask lower 10 bits, scale by 1000/1024
                 end
                 curr_digit <= 0;
                 digit_idx <= 0;     // start at 1,000,000s place

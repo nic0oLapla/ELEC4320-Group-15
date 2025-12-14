@@ -37,8 +37,8 @@ module ALU(
             case (opcode)
                 0:  ALU_out <= in_A + in_B;
                 1:  ALU_out <= in_A - in_B;
-                2:  ALU_out <= in_A * in_B;
-                3:  ALU_out <= in_A / in_B;
+                2:  ALU_out <= 32'b0;
+                3:  ALU_out <= 32'b0;
                
                 4:  ALU_out <= in_A / 2;  // TODO: Square Root of reg_A
                 5:  ALU_out <= 32'b0;  // TODO: Cosine of reg_A

@@ -24,10 +24,9 @@ module top(
     input         clk,
     input         PS2Data,
     input         PS2Clk,
-    output        tx,
-    output        led_0,
-    output        led_1
+    output        tx
 );
+    wire        clk_300;
 
     wire [7:0]  ps2_code;
     wire        ps2_valid;
@@ -52,10 +51,13 @@ module top(
     wire        uart_ready;
     wire        uart_start;
     
-    
+    clk_300_mhz clk_gen_300 (
+        .clk_in1(clk),
+        .clk_out1(clk_300)
+    );
     
     ps2_receiver ps2_in (
-        .clk        (clk),
+        .clk        (clk_300),
         .kb_clk     (PS2Clk),
         .kb_key     (PS2Data),
         
@@ -64,7 +66,7 @@ module top(
     );
     
     keys_2_calc k2c (
-        .clk(clk),
+        .clk(clk_300),
         .keycode(ps2_code),
         .start(ps2_valid),        
                  
@@ -75,7 +77,7 @@ module top(
     );
     
     accumulator acc (
-        .clk(clk),
+        .clk(clk_300),
         .key(key_out),
         .res(alu_result),
         .start_key(key_valid),
@@ -93,7 +95,7 @@ module top(
     );
     
     ALU alu (
-        .clk(clk),
+        .clk(clk_300),
         .valid_in(acc_valid),      // Handshake: new operation is valid
         .in_A(A),
         .in_B(B),
@@ -105,7 +107,7 @@ module top(
     );
     
     num_2_ascii n2a (
-        .clk        (clk),
+        .clk        (clk_300),
         .num        (acc_final),
         .start      (acc_print),
         .uart_ready (uart_ready),
@@ -115,7 +117,7 @@ module top(
     );
     
     uart_sender uart_out (
-        .clk    (clk),
+        .clk    (clk_300),
         .start  (uart_start),
         .char   (ascii),
         

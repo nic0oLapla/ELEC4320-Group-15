@@ -23,8 +23,10 @@
 module controller_tb;
     reg clk;
     
-    reg [7:0]  ps2_code;
-    reg        ps2_valid;
+    wire        clk_300;
+
+    reg  [7:0]  ps2_code;
+    reg         ps2_valid;
     
     wire [31:0] key_out;
     wire        key_type;
@@ -44,9 +46,15 @@ module controller_tb;
     
     wire [7:0]  ascii;
     reg         uart_ready;
+    wire        uart_start;
+    
+    clk_300_mhz clk_gen_300 (
+        .clk_in1(clk),
+        .clk_out1(clk_300)
+    );
     
     keys_2_calc k2c (
-        .clk(clk),
+        .clk(clk_300),
         .keycode(ps2_code),
         .start(ps2_valid),        
                  
@@ -57,7 +65,7 @@ module controller_tb;
     );
     
     accumulator acc (
-        .clk(clk),
+        .clk(clk_300),
         .key(key_out),
         .res(alu_result),
         .start_key(key_valid),
@@ -75,7 +83,7 @@ module controller_tb;
     );
     
     ALU alu (
-        .clk(clk),
+        .clk(clk_300),
         .valid_in(acc_valid),      // Handshake: new operation is valid
         .in_A(A),
         .in_B(B),
@@ -87,12 +95,13 @@ module controller_tb;
     );
     
     num_2_ascii n2a (
-        .clk        (clk),
+        .clk        (clk_300),
         .num        (acc_final),
         .start      (acc_print),
         .uart_ready (uart_ready),
         
-        .char       (ascii)
+        .char       (ascii),
+        .uart_start (uart_start)
     );
     
     initial begin
@@ -101,40 +110,49 @@ module controller_tb;
       end
 
     initial begin
-        ps2_code = 0; ps2_valid = 0; uart_ready = 1; #100
+        ps2_code = 0; ps2_valid = 0; uart_ready = 1; #2000
 
-        ps2_code = 8'h16; ps2_valid = 1; #10
-        ps2_valid = 0; #90
-        ps2_code = 8'h1E; ps2_valid = 1; #10
-        ps2_valid = 0; #90
-        ps2_code = 8'h16; ps2_valid = 1; #10
-        ps2_valid = 0; #990
+        // 001
+        ps2_code = 8'h45; ps2_valid = 1; #3.33
+        ps2_valid = 0; #30
+        ps2_code = 8'h45; ps2_valid = 1; #3.33
+        ps2_valid = 0; #30
+        ps2_code = 8'h16; ps2_valid = 1; #3.33
+        ps2_valid = 0; #330
         
-        ps2_code = 8'h15; ps2_valid = 1; #10
-        ps2_valid = 0; #990
+        // +
+        ps2_code = 8'h15; ps2_valid = 1; #3.33
+        ps2_valid = 0; #330
         
-        ps2_code = 8'h16; ps2_valid = 1; #10
-        ps2_valid = 0; #90
-        ps2_code = 8'h1E; ps2_valid = 1; #10
-        ps2_valid = 0; #90
-        ps2_code = 8'h16; ps2_valid = 1; #10
-        ps2_valid = 0; #990
+        // 001
+        ps2_code = 8'h45; ps2_valid = 1; #3.33
+        ps2_valid = 0; #30
+        ps2_code = 8'h45; ps2_valid = 1; #3.33
+        ps2_valid = 0; #30
+        ps2_code = 8'h16; ps2_valid = 1; #3.33
+        ps2_valid = 0; #330
         
-        ps2_code = 8'h15; ps2_valid = 1; #10
-        ps2_valid = 0; #990
+        // +
+        ps2_code = 8'h15; ps2_valid = 1; #3.33
+        ps2_valid = 0; #330
         
-        ps2_code = 8'h16; ps2_valid = 1; #10
-        ps2_valid = 0; #90
-        ps2_code = 8'h1E; ps2_valid = 1; #10
-        ps2_valid = 0; #90
-        ps2_code = 8'h16; ps2_valid = 1; #10
-        ps2_valid = 0; #990
+        // half
+        ps2_code = 8'h2C; ps2_valid = 1; #3.33
+        ps2_valid = 0; #330
         
-        ps2_code = 8'h5A; ps2_valid = 1; #10
-        ps2_valid = 0; #990
-        
-        
+        // 002
+        ps2_code = 8'h45; ps2_valid = 1; #3.33
+        ps2_valid = 0; #30
+        ps2_code = 8'h45; ps2_valid = 1; #3.33
+        ps2_valid = 0; #30
+        ps2_code = 8'h1E; ps2_valid = 1; #3.33
+        ps2_valid = 0; #330
 
+        // =
+        ps2_code = 8'h5A; ps2_valid = 1; #3.33
+        ps2_valid = 0; #3330
+        
+        // should print 3.000?
 
         $display("Simulation Finished at time %t", $time);
         $finish;
