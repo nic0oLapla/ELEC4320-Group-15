@@ -220,8 +220,8 @@
         <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2020"/>
         <Step Id="synth_design">
           <Option Id="Directive">0</Option>
-          <Option Id="FlattenHierarchy">1</Option>
           <Option Id="FsmExtraction">0</Option>
+          <Option Id="FlattenHierarchy">1</Option>
         </Step>
       </Strategy>
       <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
