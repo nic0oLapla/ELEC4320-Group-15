@@ -1,23 +1,10 @@
-`timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 11.12.2025 21:29:25
-// Design Name: 
-// Module Name: define
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
+//`timescale 1ns / 1ps
+
+// Control-state definitions for the calculator state machine
+`define STARTUP 2'b00
+`define INPUT   2'b01
+`define CALC    2'b10
+`define OUTPUT  2'b11
 
 // Basic Arithmetic Operations
 `define ADD           4'd0    // Latency: 2 cycles
@@ -36,10 +23,4 @@
 `define POW           4'd11   // Latency: 5 cycles (Power)
 `define EXP           4'd12   // Latency: 4 cycles (Exponential)
 `define FACT          4'd13   // Latency: 3 cycles (Factorial)
-
-// FSM States for top.v
-`define S_STARTUP 2'b00
-`define S_IDLE    2'b01
-`define S_CALC    2'b10
-`define S_RESULT_READY 2'b11
 
