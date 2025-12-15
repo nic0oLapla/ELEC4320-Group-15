@@ -30,7 +30,8 @@ module num_2_ascii(
     output wire  running
     );
 
-    reg [31:0] div;             // "divisor"
+    
+    reg [19:0] div;             // "divisor"
     reg [21:0] int_rem;         // integer remainder
     reg [9:0] frac_rem;         // fractional remainder
     reg [3:0] curr_digit;       // value of current digit
@@ -41,8 +42,24 @@ module num_2_ascii(
     reg dot;                    // have we printed the dot yet?
 
     // State Machine
-    localparam IDLE = 0, SUB = 1, SEND_INT = 2, SEND_FRAC = 3, SEND_CR = 4, SEND_LF = 5;
-    reg [2:0] state = IDLE;
+    localparam IDLE = 0, 
+               SETUP = 1, 
+               SUB_INT_CALC = 2,   
+               SUB_INT_UPDATE = 3, 
+               SUB_FRAC_CALC = 4,
+               SUB_FRAC_UPDATE = 5,
+               WRITE = 6, 
+               SEND_INT = 7, 
+               SEND_FRAC = 8, 
+               SEND_CR = 9, 
+               SEND_LF = 10;
+    reg [3:0] state = IDLE;
+    
+    reg [9:0] frac_bits;
+    reg [9:0] frac_1000;
+    
+    reg [21:0] diff;     
+    reg        less;  
 
     always @(posedge clk) begin
         uart_start <= 0;
@@ -52,52 +69,88 @@ module num_2_ascii(
             if (start) begin 
                 if (num[31]) begin
                     neg <= 1;
-                    int_rem <= (~num + 1) >> 10; // scale by 1/1024
-                    frac_rem <= ((~num + 1) & 10'h3FF) * 1000 >> 10; // mask lower 10 bits, scale by 1000/1024
+                    int_rem <= ~num >> 10; // scale by 1/1024       
+                    frac_bits <= -num[9:0];
+                    frac_1000 <= (-num[9:0] << 4) + (-num[9:0] << 3);
                 end else begin
                     neg <= 0;
                     int_rem <= num >> 10; // scale by 1/1024
-                    frac_rem <= (num & 10'h3FF) * 1000 >> 10; // mask lower 10 bits, scale by 1000/1024
+                    frac_bits <= num[9:0];
+                    frac_1000 <= (num[9:0] << 4) + (num[9:0] << 3);
                 end
                 curr_digit <= 0;
                 digit_idx <= 0;     // start at 1,000,000s place
+                div <= 1000000;     // pre-load divisor
                 leading_zeros <= 1; // assume leading zeros
-                dot <= 1;
-                state <= SUB;       // start calculating
+                dot <= 1;           // there is a dot
+                state <= SETUP;       // start calculating
             end
         end
+        
+        SETUP: begin
+            frac_rem <= frac_bits - (frac_1000 >> 10);
+            state <= SUB_INT_CALC;
+        end
 
-        // SUBTRACT UNTIL WE FIND THE CURRENT DIGIT'S VALUE
-        SUB: begin
-            case (digit_idx)                    // probably faster than using a power circuit
-                0: div = 1000000;
-                1: div = 100000;
-                2: div = 10000;
-                3: div = 1000;
-                4: div = 100;
-                5: div = 10;
-                6: div = 1;
-                7: div = 100;
-                8: div = 10;
-                9: div = 1;
-            endcase
-            
-            if (digit_idx <= 6 && int_rem >= div) begin // INT: still going, subtract div and loop again
-                int_rem <= int_rem - div;
+        // SUBTRACT UNTIL WE FIND THE CURRENT DIGIT'S VALUE - INT
+        SUB_INT_CALC: begin
+            {less, diff} <= {1'b0, int_rem} - {1'b0, div};
+            state <= SUB_INT_UPDATE;
+        end
+        SUB_INT_UPDATE: begin
+            if (!less) begin // !less means diff >= div
+                int_rem <= diff;
                 curr_digit <= curr_digit + 1;
-            end else if (digit_idx >= 7 && frac_rem >= div) begin // FRAC: still going, subtract div and loop again
-                frac_rem <= frac_rem - div;
-                curr_digit <= curr_digit + 1;
-            end else begin // digit value found, move on to next digit
-                digitised[digit_idx] <= curr_digit;
-                curr_digit <= 0;
-                if (digit_idx == 9) begin
-                    digit_idx <= 0;
-                    state <= SEND_INT;
-                end else begin
-                    digit_idx <= digit_idx + 1;
-                end
+                state <= SUB_INT_CALC;
+            end else begin // digit value found, update digit
+                state <= WRITE;
             end
+        end
+        
+        // SUBTRACT UNTIL WE FIND THE CURRENT DIGIT'S VALUE - FRAC
+        SUB_FRAC_CALC: begin
+            {less, diff} <= {1'b0, frac_rem} - {1'b0, div};
+            state <= SUB_FRAC_UPDATE;
+        end
+        SUB_FRAC_UPDATE: begin
+            if (!less) begin // !less means diff >= div
+                frac_rem <= diff;
+                curr_digit <= curr_digit + 1;
+                state <= SUB_FRAC_CALC;
+            end else begin // digit value found, update digit
+                state <= WRITE;
+            end
+        end
+        
+        // UPDATE THE VALUE OF THE CURRENT DIGIT AND PREP THE NEXT ONE
+        WRITE: begin
+            digitised[digit_idx] <= curr_digit;
+            curr_digit <= 0;
+            case (digit_idx) // next div
+                0: div <= 100000;
+                1: div <= 10000;
+                2: div <= 1000;
+                3: div <= 100;
+                4: div <= 10;
+                5: div <= 1;
+                6: div <= 100;
+                7: div <= 10;
+                8: div <= 1;
+            endcase
+            case (digit_idx)
+            0, 1, 2, 3, 4, 5: begin
+                digit_idx <= digit_idx + 1;
+                state <= SUB_INT_CALC;
+            end
+            6, 7, 8: begin
+                digit_idx <= digit_idx + 1;
+                state <= SUB_FRAC_CALC;
+            end
+            9: begin
+                digit_idx <= 0;
+                state <= SEND_INT;
+            end
+            endcase
         end
 
         // PRINTING SIGN AND INTEGER DIGITS

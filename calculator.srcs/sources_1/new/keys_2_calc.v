@@ -24,11 +24,12 @@ module keys_2_calc(
     input [7:0] keycode,    // input from ps/2 receiver (1 byte ps/2 code)
     input start,            // sp/2 end-of-char         (1-tick high when keycode ready)
     output reg [31:0] out,  // output to accumulator
-    output reg out_type,    // output type: high = num, low = opcode
-    output reg out_valid,   // 1-tick pulse when output ready
+    output reg out_num,     // 1-tick pulse when output num ready
+    output reg out_op,      // 1-tick pulse when output op ready   
     output reg enter
     );
     
+    reg [9:0]  acc = 0;
     reg [31:0] num = 0;
     reg [1:0] count = 0;
     reg sign = 0; // 0 positive, 1 negative
@@ -40,7 +41,7 @@ module keys_2_calc(
     
     task digit(input [7:0] D); 
         begin
-            num <= (8'd10 * num) + D;
+            acc <= (acc << 3) + (acc << 1) + D; // faster version of num <= num * 10 + D
             count <= count + 1;
             if (count == 2) begin
                 state <= PREP_NUM;
@@ -51,13 +52,13 @@ module keys_2_calc(
     task opcode(input [3:0] O);
         begin
             out <= O;
-            out_type <= 0;
-            out_valid <= 1;
+            out_op <= 1;
         end
     endtask
     
     always@(posedge clk) begin
-        out_valid <= 0;
+        out_num <= 0;
+        out_op <= 0;
         enter <= 0;
         case (state)
         GET_KEY: begin
@@ -98,17 +99,17 @@ module keys_2_calc(
         end
         
         PREP_NUM: begin
-            if (num != 0) begin
-                if (!sign) num <= num << 10;
-                else num <= -(num << 10);
+            if (acc != 0) begin
+                if (!sign) num <= acc << 10;
+                else num <= -(acc << 10);
             end
             state <= PUSH_NUM;
         end
         
         PUSH_NUM: begin
             out <= num;
-            out_type <= 1;      
-            out_valid <= 1;
+            out_num <= 1;
+            acc <= 0;
             num <= 0;
             count <= 0;
             sign <= 0;

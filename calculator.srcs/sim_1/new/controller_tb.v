@@ -29,8 +29,8 @@ module controller_tb;
     reg         ps2_valid;
     
     wire [31:0] key_out;
-    wire        key_type;
-    wire        key_valid;
+    wire        key_num;
+    wire        key_op;
     wire        key_enter;
     
     wire [31:0] A;
@@ -59,8 +59,8 @@ module controller_tb;
         .start(ps2_valid),        
                  
         .out(key_out),
-        .out_type(key_type), 
-        .out_valid(key_valid),
+        .out_num(key_num), 
+        .out_op(key_op),
         .enter(key_enter)        
     );
     
@@ -68,9 +68,9 @@ module controller_tb;
         .clk(clk_300),
         .key(key_out),
         .res(alu_result),
-        .start_key(key_valid),
+        .start_key_num(key_num),
+        .start_key_op(key_op),
         .start_alu(alu_valid),
-        .type_key(key_type),
         .idle(alu_idle),
         .enter(key_enter),
         
