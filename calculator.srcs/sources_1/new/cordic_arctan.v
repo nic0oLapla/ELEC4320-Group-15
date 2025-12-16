@@ -103,9 +103,18 @@ module cordic_arctan #(
                     z <= z_new;
 
                     if (iter == ITER-1) begin
-                        angle_out <= z_new + z_offset;
-                        out_valid <= 1'b1;
-                        state     <= S_IDLE;
+                    // Saturate final angle to Q22.10 bounds
+                    reg signed [N-1:0] angle_tmp;
+                    angle_tmp = z_new + z_offset;
+                    if (angle_tmp[N-1] && angle_tmp != `MIN_Q && angle_tmp < `MIN_Q) begin
+                    angle_out <= `MIN_Q;
+                    end else if (!angle_tmp[N-1] && angle_tmp > `MAX_Q) begin
+                    angle_out <= `MAX_Q;
+                    end else begin
+                    angle_out <= angle_tmp;
+                    end
+                    out_valid <= 1'b1;
+                    state     <= S_IDLE;
                     end
                     iter <= iter + 1'b1;
                 end

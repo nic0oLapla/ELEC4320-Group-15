@@ -50,6 +50,12 @@ module exp_natural_fixed #(
     reg [Q-1:0]        frac_k;
     reg [4:0]          step;
 
+    // Procedural temporary variables (declare at module scope for Verilog)
+    reg signed [N+Q-1:0] mult_tmp;
+    reg signed [N-1:0]   res_shifted;
+    reg signed [2*N-1:0] mult;
+    reg signed [N-1:0]   shifted_k;
+
     assign in_ready = (state == S_IDLE);
 
     always @(posedge clk) begin
@@ -69,11 +75,11 @@ module exp_natural_fixed #(
                 S_IDLE: begin
                     if (in_valid) begin
                         // convert to log2 domain: k = x / ln2 ~= x * inv_ln2
-                        reg signed [N+Q-1:0] mult_tmp;
                         mult_tmp = x * INV_LN2;
-                        k_fixed  <= mult_tmp >>> Q;
+                        shifted_k = mult_tmp >>> Q;
+                        k_fixed  <= shifted_k;
                         int_k    <= (mult_tmp >>> (2*Q)); // integer part of k_fixed (signed)
-                        frac_k   <= (mult_tmp >>> Q) [Q-1:0];
+                        frac_k   <= shifted_k[Q-1:0];
                         result   <= ONE;
                         step     <= 0;
                         state    <= S_PROC;
@@ -82,7 +88,6 @@ module exp_natural_fixed #(
 
                 S_PROC: begin
                     // apply integer part
-                    reg signed [N-1:0] res_shifted;
                     res_shifted = result;
                     if (step == 0) begin
                         if (int_k >= 0) begin
@@ -101,7 +106,6 @@ module exp_natural_fixed #(
                     end else if (step <= FRAC_STEPS) begin
                         // fractional multiplicative refinement
                         if (frac_k[Q-step]) begin
-                            reg signed [2*N-1:0] mult;
                             mult   = res_shifted * pow_const[step-1];
                             result <= mult >>> Q;
                         end

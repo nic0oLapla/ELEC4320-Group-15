@@ -38,8 +38,20 @@
 `define FACT          4'd13   // Latency: 3 cycles (Factorial)
 
 // Fixed-point standard parameters (Q format: signed WIDTH bits, FRAC fractional bits)
+// Global Q22.10 contract: two's-complement 32-bit with 10 fractional bits.
+// All module inputs/outputs must be 32-bit Q22.10. Modules are responsible for emitting
+// final 32-bit Q22.10 results with standardized truncation to 32 bits at their output stage.
+// Rounding policy: default is truncation toward zero unless otherwise documented per module.
 `define WIDTH         32
 `define FRAC          10
+`define INT           (`WIDTH-`FRAC-1)
+
+// Two's-complement min/max for saturation
+`define MAX_Q         32'h7FFFFFFF
+`define MIN_Q         32'h80000000
+
+// Rounding bias helper for optional round-to-nearest implementations
+`define RND_BIAS      (1<<(`FRAC-1))
 
 // Common latencies (cycles) for pipelined blocks
 `define MULT_LAT      5

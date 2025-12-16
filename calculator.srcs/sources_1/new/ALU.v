@@ -50,7 +50,7 @@ module ALU #(
     localparam OPSTATE_TAN   = 3'd5;
     localparam OPSTATE_ATAN  = 3'd6;
 
-    reg  [2:0]  active_op = OPSTATE_NONE;
+    reg  [2:0]  active_op;
     reg  [N-1:0] op_a;
     reg  [N-1:0] op_b;
 
@@ -198,8 +198,8 @@ module ALU #(
             active_op <= OPSTATE_NONE;
         end else if (active_op == OPSTATE_NONE && valid_in) begin
             case (opcode)
-                `ADD:  begin ALU_out <= in_A + in_B; valid_out <= 1'b1; end
-                `SUB:  begin ALU_out <= in_A - in_B; valid_out <= 1'b1; end
+                `ADD:  begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end
+                `SUB:  begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end
                 `MULT: begin
                     if (mult_start) begin
                         op_a      <= in_A;
@@ -216,7 +216,7 @@ module ALU #(
                 end
 
                 `SQRT:   begin ALU_out <= in_A / 2; valid_out <= 1'b1; end // TODO: Square Root of reg_A
-                `COS:    begin ALU_out <= 32'b0; valid_out <= 1'b1; end    // TODO: Cosine of reg_A
+                `COS:    begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end    // TODO: Cosine of reg_A
                 `TAN:    begin
                     if (tan_start) begin
                         op_a      <= in_A;
@@ -224,8 +224,8 @@ module ALU #(
                         active_op <= OPSTATE_TAN;
                     end
                 end
-                `ARCSIN: begin ALU_out <= 32'b0; valid_out <= 1'b1; end    // TODO: Arcsine of reg_A
-                `ARCCOS: begin ALU_out <= 32'b0; valid_out <= 1'b1; end    // TODO: Arccosine of reg_A
+                `ARCSIN: begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end    // TODO: Arcsine of reg_A
+                `ARCCOS: begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end    // TODO: Arccosine of reg_A
                 `ARCTAN: begin
                     if (atan_start) begin
                         op_a      <= in_A; // y input
@@ -241,9 +241,9 @@ module ALU #(
                         active_op <= OPSTATE_LOG;
                     end
                 end
-                `POW:  begin ALU_out <= 32'b0; valid_out <= 1'b1; end // TODO: reg_A raised to power reg_B
+                `POW:  begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end // TODO: reg_A raised to power reg_B
 
-                `EXP:  begin ALU_out <= 32'b0; valid_out <= 1'b1; end // TODO: e raised to power reg_A
+                `EXP:  begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end // TODO: e raised to power reg_A
                 `FACT: begin
                     if (fact_start) begin
                         op_a      <= in_A;
@@ -251,7 +251,7 @@ module ALU #(
                         active_op <= OPSTATE_FACT;
                     end
                 end
-                default: begin ALU_out <= 32'b0; valid_out <= 1'b1; end
+                default: begin ALU_out <= {N{1'b0}}; valid_out <= 1'b1; end
             endcase
         end
         end

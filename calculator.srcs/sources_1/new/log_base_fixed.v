@@ -54,6 +54,7 @@ module log_base_fixed #(
 
     wire             div_in_ready;
     wire             div_out_valid;
+    wire             div_overflow;
     wire [N-1:0]     div_q;
 
     divider_pipelined #(.Q(Q), .N(N)) u_div (
@@ -64,7 +65,7 @@ module log_base_fixed #(
         .divisor     (log2_base),
         .in_ready    (div_in_ready),
         .out_valid   (div_out_valid),
-        .out_overflow(),      // ignored
+        .out_overflow(div_overflow),
         .quotient    (div_q)
     );
 
@@ -123,13 +124,13 @@ module log_base_fixed #(
                 end
 
                 S_ITER_BASE: begin
-                    reg [2*N-1:0] mult;
-                    reg [N-1:0]   squared;
-                    reg [N-1:0]   next_x;
-                    reg signed [N-1:0] next_log;
-                    reg signed [N-1:0] delta;
+                    reg signed [2*N-1:0] mult;
+                    reg signed [N-1:0]   squared;
+                    reg signed [N-1:0]   next_x;
+                    reg signed [N-1:0]   next_log;
+                    reg signed [N-1:0]   delta;
 
-                    mult     = work_x * work_x;
+                    mult     = $signed(work_x) * $signed(work_x);
                     squared  = mult >>> Q;
                     next_x   = squared;
                     next_log = work_log;
@@ -169,13 +170,13 @@ module log_base_fixed #(
                 end
 
                 S_ITER_VAL: begin
-                    reg [2*N-1:0] mult;
-                    reg [N-1:0]   squared;
-                    reg [N-1:0]   next_x;
-                    reg signed [N-1:0] next_log;
-                    reg signed [N-1:0] delta;
+                    reg signed [2*N-1:0] mult;
+                    reg signed [N-1:0]   squared;
+                    reg signed [N-1:0]   next_x;
+                    reg signed [N-1:0]   next_log;
+                    reg signed [N-1:0]   delta;
 
-                    mult     = work_x * work_x;
+                    mult     = $signed(work_x) * $signed(work_x);
                     squared  = mult >>> Q;
                     next_x   = squared;
                     next_log = work_log;
@@ -208,7 +209,12 @@ module log_base_fixed #(
 
                 S_DIV_WAIT: begin
                     if (div_out_valid) begin
-                        log_out   <= div_q;
+                        // Clamp final output to Q22.10 bounds (saturate on overflow)
+                        if (div_overflow) begin
+                            log_out <= (div_q[N-1] ? `MIN_Q : `MAX_Q);
+                        end else begin
+                            log_out <= div_q;
+                        end
                         out_valid <= 1'b1;
                         state     <= S_IDLE;
                     end

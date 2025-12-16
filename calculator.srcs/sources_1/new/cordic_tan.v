@@ -50,6 +50,7 @@ module cordic_tan #(
     // Divider for tan = sin/cos
     wire        div_in_ready;
     wire        div_out_valid;
+    wire        div_overflow;
     wire [N-1:0] div_q;
     wire        div_start = (state == S_DIV) && div_in_ready;
 
@@ -61,7 +62,7 @@ module cordic_tan #(
         .divisor     (cos_reg),
         .in_ready    (div_in_ready),
         .out_valid   (div_out_valid),
-        .out_overflow(), // ignored
+        .out_overflow(div_overflow),
         .quotient    (div_q)
     );
 
@@ -118,13 +119,28 @@ module cordic_tan #(
                 end
 
                 S_DIV: begin
-                    if (div_start) begin
-                        // wait for divider pipeline to finish
-                    end
-                    if (div_out_valid) begin
-                        tan_out   <= div_q;
+                    // Protect against tan asymptotes: |cos| near zero
+                    reg [N-1:0] abs_cos;
+                    abs_cos = cos_reg[N-1] ? -cos_reg : cos_reg;
+                    // One LSB in Q format
+                    if (abs_cos <= {{(N-1){1'b0}},1'b1}) begin
+                        // Saturate according to sign(sin/cos)
+                        tan_out   <= (sin_reg[N-1] ^ cos_reg[N-1]) ? `MIN_Q : `MAX_Q;
                         out_valid <= 1'b1;
                         state     <= S_IDLE;
+                    end else begin
+                        if (div_start) begin
+                            // wait for divider pipeline to finish
+                        end
+                        if (div_out_valid) begin
+                            if (div_overflow) begin
+                                tan_out <= (sin_reg[N-1] ^ cos_reg[N-1]) ? `MIN_Q : `MAX_Q;
+                            end else begin
+                                tan_out <= div_q;
+                            end
+                            out_valid <= 1'b1;
+                            state     <= S_IDLE;
+                        end
                     end
                 end
             endcase

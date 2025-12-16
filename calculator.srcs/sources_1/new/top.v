@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -129,5 +130,89 @@ module top(
         .tx     (tx),
         .ready  (uart_ready)
     );
-    
+
+    // -------------------------------------------------------------------------
+    // Passive FSM monitor (debug only) mapped to existing valid/ready protocol.
+    // Does NOT drive datapath; useful for waveform visibility and integration
+    // with legacy state naming. Synchronous reset per best_practices.md.
+    // States: STARTUP -> INPUT -> CALC -> OUTPUT -> INPUT
+    //   - INPUT  : waiting for acc_valid (operation prepared)
+    //   - CALC   : after acc_valid until alu_valid
+    //   - OUTPUT : after alu_valid while printing is in progress
+    // STARTUP exits after first cycle post reset.
+    // -------------------------------------------------------------------------
+    localparam [1:0] ST_STARTUP = 2'd0,
+                     ST_INPUT   = 2'd1,
+                     ST_CALC    = 2'd2,
+                     ST_OUTPUT  = 2'd3;
+
+    reg  [1:0] fsm_cs;
+    reg        print_busy;         // set on acc_print pulse; cleared after quiet window
+    reg  [3:0] print_quiet_cnt;    // counts idle cycles with no uart_start activity
+
+    // Track printing activity window heuristically (no explicit done from n2a)
+    always @(posedge clk_300) begin
+        if (reset) begin
+            print_busy      <= 1'b0;
+            print_quiet_cnt <= 4'd0;
+        end else begin
+            // Start of a new print sequence
+            if (acc_print)
+                print_busy <= 1'b1;
+
+            // Count quiet cycles when no UART start strobe occurs
+            if (print_busy) begin
+                if (uart_start) begin
+                    print_quiet_cnt <= 4'd0;
+                end else if (print_quiet_cnt != 4'hF) begin
+                    print_quiet_cnt <= print_quiet_cnt + 4'd1;
+                end
+
+                // Consider printing done after a quiet window and UART ready
+                if (print_quiet_cnt >= 4 && uart_ready) begin
+                    print_busy      <= 1'b0;
+                    print_quiet_cnt <= 4'd0;
+                end
+            end else begin
+                print_quiet_cnt <= 4'd0;
+            end
+        end
+    end
+
+    // Synchronous FSM monitor
+    always @(posedge clk_300) begin
+        if (reset) begin
+            fsm_cs <= ST_STARTUP;
+        end else begin
+            case (fsm_cs)
+                ST_STARTUP: begin
+                    // Exit startup after reset is deasserted for one cycle
+                    fsm_cs <= ST_INPUT;
+                end
+                ST_INPUT: begin
+                    if (acc_valid)
+                        fsm_cs <= ST_CALC;
+                    else
+                        fsm_cs <= ST_INPUT;
+                end
+                ST_CALC: begin
+                    if (alu_valid)
+                        fsm_cs <= ST_OUTPUT;
+                    else
+                        fsm_cs <= ST_CALC;
+                end
+                ST_OUTPUT: begin
+                    if (!print_busy)
+                        fsm_cs <= ST_INPUT;
+                    else
+                        fsm_cs <= ST_OUTPUT;
+                end
+                default: begin
+                    fsm_cs <= ST_STARTUP;
+                end
+            endcase
+        end
+    end
+
 endmodule
+`default_nettype wire
