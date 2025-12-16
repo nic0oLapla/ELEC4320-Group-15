@@ -37,3 +37,10 @@
 `define EXP           4'd12   // Latency: 4 cycles (Exponential)
 `define FACT          4'd13   // Latency: 3 cycles (Factorial)
 
+// Fixed-point standard parameters (Q format: signed WIDTH bits, FRAC fractional bits)
+`define WIDTH         32
+`define FRAC          10
+
+// Common latencies (cycles) for pipelined blocks
+`define MULT_LAT      5
+`define DIV_LAT_EST   84   // ~2*(WIDTH+FRAC); actual divider latency is data-independent but ~84 for 32/10

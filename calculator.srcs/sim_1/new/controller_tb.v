@@ -84,6 +84,7 @@ module controller_tb;
     
     ALU alu (
         .clk(clk_300),
+        .reset(1'b0),
         .valid_in(acc_valid),      // Handshake: new operation is valid
         .in_A(A),
         .in_B(B),

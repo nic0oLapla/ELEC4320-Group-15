@@ -22,6 +22,7 @@
 
 module top(
     input         clk,
+    input         reset,
     input         PS2Data,
     input         PS2Clk,
     output        tx
@@ -94,8 +95,12 @@ module top(
         .print(acc_print)
     );
     
-    ALU alu (
+    ALU #(
+        .N(32),
+        .Q(10)
+    ) alu (
         .clk(clk_300),
+        .reset(reset),
         .valid_in(acc_valid),      // Handshake: new operation is valid
         .in_A(A),
         .in_B(B),
